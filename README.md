@@ -73,7 +73,7 @@ Modelos
  - Modelo de colas: Los mensajes son repartidos.
  - Modelo publicador/subscriptor: Los mensajes se difunden en broadcast.
 
-# INSTALACIÓN KAFKA
+## INSTALACIÓN KAFKA
 Descargar el paquete de kafka desde: https://www.apache.org/dyn/closer.cgi?path=/kafka/2.5.0/kafka_2.12-2.5.0.tgz
 ```
 $ cd opt/
@@ -134,6 +134,7 @@ Los topics están formados por particiones
 - Internamente cada mensaje dentro de log es identificado por un offset.
 - Las particiones se distribuyen entre los brokers.
 - Las particiones son utilizadas para balancear los mensajes a través de los brokers.
+
 		Más brokers y particiones == mayor througput
 		---
 		
@@ -141,6 +142,7 @@ Los topics están formados por particiones
 - Las topic de Kafka tiene la posibilidad de configurar replicas.
 - Las replicas son utilizadas para conseguir alta disponibilidad del servicio.
 - Las replicas se consiguen mediante la duplicación de las particiones en distintos brokers.
+
 		Máximas replicas == Numero de brokers.
 		---
 		
@@ -151,16 +153,29 @@ Las replicas provocan la disminución de la tasa de producción de mensajes por 
 ## Mensajes
 
 Los mensajes están formados por:
+
 • TIMESTAMP
+
 • CLAVE
+
 • VALOR
+
 La clave suele ser usada para decidir a que partición se envía cada mensaje.
 
+## Configuración: Topics
 
-## CREAR TOPICS
+### Creación de topics:
 num.partitions : Número de particiones por defecto cuando se crea una topic.
 default.replication.factor : Valor del factor de replicación por defecto. 
 Ambos valores son de utilidad cuando esta activa la creación automática de topics: auto.create.topics.enable
+```
+kafka-topics.sh --zookeeper localhost:2181 --create --topic topicTest --partitions 4 --replication-factor 2 —config x=y
+```
+En la creación se indica:
+- Numero de particiones: 4
+- Numero de replicas: 2
+- Opcional: Configuraciones de topic
+
 ```
 [root@srvdev kafka]# cd kafka_2.11-2.4.1
 [root@srvdev kafka_2.11-2.4.1]# bin/kafka-topics.sh --create --partitions 1 --replication-factor 1 --topic test1 --zookeeper localhost:2181
@@ -175,65 +190,59 @@ bin/kafka-topics.sh --create --partitions 3 --topic test --zookeeper localhost:2
 bin/kafka-topics.sh --describe --topic test --zookeeper localhost:2181
 ```
 
-## PRODUCTOR CONSUMIDOR
-Los topics están formados por particiones
-Modelo de colas: Los mensajes son repartidos.
-Modelo publicador/subscriptor: Los mensajes se difunden en broadcast.
+### Eliminar topics:
+```
+kafka-topics.sh --zookeeper localhost:2181 --delete --topic topicTest
+```
+NOTA: Para poder eliminar topics es necesario habilitar la siguiente propiedad en el fichero server.properties
+delete.topic.enable=true
 
-### Productores
-Los productores son los encargados de enviar los mensajes a los distintos topics.
-Los mensajes se envían directamente al broker que tiene el leader de la partición.
-	1.	El productor pregunta a cualquier broker.
-	2.	El broker devuelve el leader de la partición.
-Los mensajes se pueden producir utilizando un particionado o de manera aleatoria.
-•	Normalmente se utiliza la clave de los mensajes para realizar el particionado.
-•	Los mensajes se pueden enviar por lotes de manera asíncrona:
-	o	Basado en tiempo.
-	o	Basado en número.
+### Añadir configuración:
+```
+kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --config x=y
+```
+### Eliminar configuración:
+```
+kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --deleteConfig x
+```
+### Configuración: Particiones
+Añadir particiones:
+```
+root@kschool:~# kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --partitions 40
+```
+NOTA: Las particiones no se pueden disminuir.
 
-productor
----
+### Configuración: Replicas
+Para añadir replicas se usa el siguiente comando:
 ```
-bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test1
+bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 --reassignment-json-file incremento-replicas.json --execute 
 ```
-consumidor
----
+El contenido del fichero incremento-replicas.json es:
 ```
-bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1
+{"version":1, "partitions":[{"topic":"topicTest", "partition":0, “replicas":[1,2,3]}]}
 ```
-productor
----
+Mediante el fichero JSON, se indica que particiones (0) de que topic (topicTest) están replicas en que brokers (1, 2, 3).
+
+Para verificar que se ha aplicado correctamente podemos usar:
 ```
-bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test1 --property parse.key=true --property key.separator=,
+bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 --reassignment-json-file incremento-replicas.json --verify
 ```
-consumidor
----
-```
-bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1 --from-beginning --property print.key=true 
-bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1 --from-beginning --property print.key=true --consumer.config config/consumer.properties
-[root@srvdev kafka_2.11-2.4.1]# ls /tmp/kafka-logs/
-cleaner-offset-checkpoint  __consumer_offsets-20  __consumer_offsets-33  __consumer_offsets-46
-__consumer_offsets-0       __consumer_offsets-21  __consumer_offsets-34  __consumer_offsets-47
-__consumer_offsets-1       __consumer_offsets-22  __consumer_offsets-35  __consumer_offsets-48
-__consumer_offsets-10      __consumer_offsets-23  __consumer_offsets-36  __consumer_offsets-49
-__consumer_offsets-11      __consumer_offsets-24  __consumer_offsets-37  __consumer_offsets-5
-__consumer_offsets-12      __consumer_offsets-25  __consumer_offsets-38  __consumer_offsets-6
-__consumer_offsets-13      __consumer_offsets-26  __consumer_offsets-39  __consumer_offsets-7
-__consumer_offsets-14      __consumer_offsets-27  __consumer_offsets-4   __consumer_offsets-8
-__consumer_offsets-15      __consumer_offsets-28  __consumer_offsets-40  __consumer_offsets-9
-__consumer_offsets-16      __consumer_offsets-29  __consumer_offsets-41  log-start-offset-checkpoint
-__consumer_offsets-17      __consumer_offsets-3   __consumer_offsets-42  meta.properties
-__consumer_offsets-18      __consumer_offsets-30  __consumer_offsets-43  recovery-point-offset-checkpoint
-__consumer_offsets-19      __consumer_offsets-31  __consumer_offsets-44  replication-offset-checkpoint
-__consumer_offsets-2       __consumer_offsets-32  __consumer_offsets-45  test1-0
-[root@srvdev kafka_2.11-2.4.1]# ls /tmp/kafka-logs/test1-0/
-00000000000000000000.index  00000000000000000000.log  00000000000000000000.timeindex  leader-epoch-checkpoint
-[root@srvdev kafka_2.11-2.4.1]# more /tmp/kafka-logs/test1-0/00000000000000000000.log
-```
-## Log Compaction
+
+### Configuración: Log Compaction
 Esta propiedad asegura que se almacena al menos el último valor para cada clave en una partición.
+
 CASO DE USO: Escenario donde se necesita recuperar un estado antes fallo, o restaurar caches.
 Gran utilidad en Kafka Streams y Apache Samza.
+
+Por defecto el limpiador esta desactivado. Para activar en el server.properties:
+```
+log.cleaner.enable=true
+```
+Log Compaction se habilita por topics:
+```
+kafka-topics.sh --zookeeper localhost:2181 --create --topic topicTest --config cleanup.policy=compact --partitions 4 --replication-factor 2
+kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --config cleanup.policy=compact
+```
 
 ## Gestión de espacio
 - El disco duro no es infinito.
@@ -297,68 +306,63 @@ Se pueden configurar ambas:
 • Tamaño máximo.
 - Configurando ambas conseguimos que si se tiene un disco pequeño y se reciben más datos de la cuenta el disco no se quede sin espacio.
 
-## Configuración: Topics
+# PRODUCTOR CONSUMIDOR
+Los topics están formados por particiones
+Modelo de colas: Los mensajes son repartidos.
+Modelo publicador/subscriptor: Los mensajes se difunden en broadcast.
 
-### Creación de topics:
-```
-kafka-topics.sh --zookeeper localhost:2181 --create --topic topicTest --partitions 4 --replication-factor 2 —config x=y
-```
-En la creación se indica:
-- Numero de particiones: 4
-- Numero de replicas: 2
-- Opcional: Configuraciones de topic
+## Productores
+Los productores son los encargados de enviar los mensajes a los distintos topics.
+Los mensajes se envían directamente al broker que tiene el leader de la partición.
+	1.	El productor pregunta a cualquier broker.
+	2.	El broker devuelve el leader de la partición.
+Los mensajes se pueden producir utilizando un particionado o de manera aleatoria.
+•	Normalmente se utiliza la clave de los mensajes para realizar el particionado.
+•	Los mensajes se pueden enviar por lotes de manera asíncrona:
+	o	Basado en tiempo.
+	o	Basado en número.
 
-### Eliminar topics:
+productor
+---
 ```
-kafka-topics.sh --zookeeper localhost:2181 --delete --topic topicTest
+bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test1
 ```
-NOTA: Para poder eliminar topics es necesario habilitar la siguiente propiedad en el fichero server.properties
-delete.topic.enable=true
-
-### Añadir configuración:
+consumidor
+---
 ```
-kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --config x=y
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1
 ```
-### Eliminar configuración:
+productor
+---
 ```
-kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --deleteConfig x
+bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test1 --property parse.key=true --property key.separator=,
 ```
-### Configuración: Particiones
-### Añadir particiones:
+consumidor
+---
 ```
-root@kschool:~# kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --partitions 40
-```
-NOTA: Las particiones no se pueden disminuir.
-
-### Configuración: Replicas
-Para añadir replicas se usa el siguiente comando:
-```
-bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 --reassignment-json-file incremento-replicas.json --execute 
-```
-
-El contenido del fichero incremento-replicas.json es:
-```
-{"version":1, "partitions":[{"topic":"topicTest", "partition":0, “replicas":[1,2,3]}]}
-```
-Mediante el fichero JSON, se indica que particiones (0) de que topic (topicTest) están replicas en que brokers (1, 2, 3).
-
-Para verificar que se ha aplicado correctamente podemos usar:
-```
-bin/kafka-reassign-partitions.sh --zookeeper localhost:2181 --reassignment-json-file incremento-replicas.json --verify
-```
-
-### Configuración: Log Compaction
-Por defecto el limpiador esta desactivado. Para activar en el server.properties:
-```
-log.cleaner.enable=true
-```
-Log Compaction se habilita por topics:
-```
-kafka-topics.sh --zookeeper localhost:2181 --create --topic topicTest --config cleanup.policy=compact --partitions 4 --replication-factor 2
-kafka-topics.sh --zookeeper localhost:2181 --alter --topic topicTest --config cleanup.policy=compact
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1 --from-beginning --property print.key=true 
+bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test1 --from-beginning --property print.key=true --consumer.config config/consumer.properties
+[root@srvdev kafka_2.11-2.4.1]# ls /tmp/kafka-logs/
+cleaner-offset-checkpoint  __consumer_offsets-20  __consumer_offsets-33  __consumer_offsets-46
+__consumer_offsets-0       __consumer_offsets-21  __consumer_offsets-34  __consumer_offsets-47
+__consumer_offsets-1       __consumer_offsets-22  __consumer_offsets-35  __consumer_offsets-48
+__consumer_offsets-10      __consumer_offsets-23  __consumer_offsets-36  __consumer_offsets-49
+__consumer_offsets-11      __consumer_offsets-24  __consumer_offsets-37  __consumer_offsets-5
+__consumer_offsets-12      __consumer_offsets-25  __consumer_offsets-38  __consumer_offsets-6
+__consumer_offsets-13      __consumer_offsets-26  __consumer_offsets-39  __consumer_offsets-7
+__consumer_offsets-14      __consumer_offsets-27  __consumer_offsets-4   __consumer_offsets-8
+__consumer_offsets-15      __consumer_offsets-28  __consumer_offsets-40  __consumer_offsets-9
+__consumer_offsets-16      __consumer_offsets-29  __consumer_offsets-41  log-start-offset-checkpoint
+__consumer_offsets-17      __consumer_offsets-3   __consumer_offsets-42  meta.properties
+__consumer_offsets-18      __consumer_offsets-30  __consumer_offsets-43  recovery-point-offset-checkpoint
+__consumer_offsets-19      __consumer_offsets-31  __consumer_offsets-44  replication-offset-checkpoint
+__consumer_offsets-2       __consumer_offsets-32  __consumer_offsets-45  test1-0
+[root@srvdev kafka_2.11-2.4.1]# ls /tmp/kafka-logs/test1-0/
+00000000000000000000.index  00000000000000000000.log  00000000000000000000.timeindex  leader-epoch-checkpoint
+[root@srvdev kafka_2.11-2.4.1]# more /tmp/kafka-logs/test1-0/00000000000000000000.log
 ```
 
-## Configuración: Productor y Consumidor
+# Configuración: Productor y Consumidor
 
 ## Configuración: Productor Básica
 Las principales propiedades para el productor son:
